@@ -79,7 +79,7 @@ class ProductController extends Controller
         $products = $products->get();
 
         foreach($products as &$product) {
-            $product->image = url('/storage/' . $product->image);
+            $product->image = Storage::url($product->image);
         }
 
         return response()->json($products, 200);
@@ -122,7 +122,7 @@ class ProductController extends Controller
 
         // generate name for picture and store it to public storage
         $imageName = time().'.'.$extension;
-        Storage::disk('public')->put($imageName, base64_decode($img));
+        Storage::disk('s3')->put($imageName, base64_decode($img));
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 500);
@@ -150,7 +150,7 @@ class ProductController extends Controller
         ->select('products.*', 'categories.name AS category_name', 'regions.name AS region_name')
         ->first();
 
-        $productFullInfo->image = url('/storage/' . $productFullInfo->image);
+        $productFullInfo->image = Storage::url($productFullInfo->image);
 
         return $productFullInfo;
     }
@@ -190,7 +190,7 @@ class ProductController extends Controller
         if($request->image != null) {
             //if a new picture was uploaded
             //delete old one
-            unlink(storage_path('app/public/' . $product->image));
+            Storage::disk('s3')->delete($product->image);
 
             $image_64 = $request->image; // base64 encoded image
             $extension = explode('/', explode(':', substr($image_64, 0, strpos($image_64, ';')))[1])[1];   // .jpg .png .pdf
@@ -202,7 +202,7 @@ class ProductController extends Controller
 
             // generate name for picture and store it to public storage
             $imageName = time().'.'.$extension;
-            Storage::disk('public')->put($imageName, base64_decode($img));
+            Storage::disk('s3')->put($imageName, base64_decode($img));
 
             $product->update(array_merge($request->only('name', 'description', 'price', 'quantity', 'category_id', 'region_id'), ['image' => $imageName]));
         
@@ -224,7 +224,7 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         $productId = $product->id;
-        unlink(storage_path('app/public/'. $product->image));
+        Storage::disk('s3')->delete($product->image);
         $product->delete();
 
         return response()->json(['action' => 'deleted product', 'id' => $productId], 200);
