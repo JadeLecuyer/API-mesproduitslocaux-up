@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * @group Product management
@@ -77,6 +78,10 @@ class ProductController extends Controller
 
         $products = $products->get();
 
+        foreach($products as &$product) {
+            $product->image = url('/storage/' . $product->image);
+        }
+
         return response()->json($products, 200);
     }
 
@@ -107,11 +112,23 @@ class ProductController extends Controller
             'region_id' => 'required|exists:regions,id',
         ]);
 
+        $image_64 = $request->image; // base64 encoded image
+        $extension = explode('/', explode(':', substr($image_64, 0, strpos($image_64, ';')))[1])[1];   // .jpg .png .pdf
+
+        $replace = substr($image_64, 0, strpos($image_64, ',')+1); 
+        // find substring fro replace here eg: data:image/png;base64,
+        $img = str_replace($replace, '', $image_64); 
+        $img = str_replace(' ', '+', $img);
+
+        // generate name for picture and store it to public storage
+        $imageName = time().'.'.$extension;
+        Storage::disk('public')->put($imageName, base64_decode($img));
+
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 500);
         }
 
-        $product = Product::create($request->all());
+        $product = Product::create(array_merge($request->only('name', 'description', 'price', 'quantity', 'category_id', 'region_id'), ['image' => $imageName]));
 
         return $this->show($product);
 
@@ -132,6 +149,8 @@ class ProductController extends Controller
         ->where('products.id', '=', $product->id)
         ->select('products.*', 'categories.name AS category_name', 'regions.name AS region_name')
         ->first();
+
+        $productFullInfo->image = url('/storage/' . $productFullInfo->image);
 
         return $productFullInfo;
     }
@@ -168,7 +187,28 @@ class ProductController extends Controller
             return response()->json(['errors' => $validator->errors()], 500);
         }
 
-        $product->update($request->all());
+        if($request->image != null) {
+            //if a new picture was uploaded
+            //delete old one
+            unlink(storage_path('app/public/' . $product->image));
+
+            $image_64 = $request->image; // base64 encoded image
+            $extension = explode('/', explode(':', substr($image_64, 0, strpos($image_64, ';')))[1])[1];   // .jpg .png .pdf
+
+            $replace = substr($image_64, 0, strpos($image_64, ',')+1); 
+            // find substring fro replace here eg: data:image/png;base64,
+            $img = str_replace($replace, '', $image_64); 
+            $img = str_replace(' ', '+', $img); 
+
+            // generate name for picture and store it to public storage
+            $imageName = time().'.'.$extension;
+            Storage::disk('public')->put($imageName, base64_decode($img));
+
+            $product->update(array_merge($request->only('name', 'description', 'price', 'quantity', 'category_id', 'region_id'), ['image' => $imageName]));
+        
+        } else {
+            $product->update($request->only('name', 'description', 'price', 'quantity', 'category_id', 'region_id'));
+        }
 
         return $this->show($product);
     }
@@ -184,6 +224,7 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         $productId = $product->id;
+        unlink(storage_path('app/public/'. $product->image));
         $product->delete();
 
         return response()->json(['action' => 'deleted product', 'id' => $productId], 200);
