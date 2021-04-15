@@ -79,7 +79,9 @@ class ProductController extends Controller
         $products = $products->get();
 
         foreach($products as &$product) {
-            $product->image = Storage::url($product->image);
+            if(!empty($product->image)) {
+                $product->image = Storage::url($product->image);
+            }
         }
 
         return response()->json($products, 200);
@@ -150,7 +152,9 @@ class ProductController extends Controller
         ->select('products.*', 'categories.name AS category_name', 'regions.name AS region_name')
         ->first();
 
-        $productFullInfo->image = Storage::url($productFullInfo->image);
+        if(!empty($productFullInfo->image)) {
+            $productFullInfo->image = Storage::url($productFullInfo->image);
+        }
 
         return $productFullInfo;
     }
